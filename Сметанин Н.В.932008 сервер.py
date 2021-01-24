@@ -21,9 +21,9 @@ BASE_URL    = "/api/v1"
 CONVERT_TIME_PATH   = BASE_URL + "/convert"
 DATE_DIFF_PATH      = BASE_URL + "/datediff"
 
-#-------------------------------------------
-#---------------  ROUTE  -------------------
-#-------------------------------------------
+
+#ROUTE
+
 
 def route(path,request_type, body):
     if path == CONVERT_TIME_PATH and request_type == POST:      # 2nd task
@@ -38,14 +38,13 @@ def route(path,request_type, body):
     else:
         return None, NOT_IMPLEMENTED                            # indefinitely
 
-#-------------------------------------------
-#---------------  TASKS  -------------------
-#-------------------------------------------
+
+#TASKS
 
 def make_json(dict):
     return json.dumps(dict, sort_keys=True, default=str)
 
-#--------------  1st TASK  -----------------
+#1st TASK
 
 def get_current_time_req(tz):
     result = current_date(tz)
@@ -61,7 +60,7 @@ def current_date(tz):
     aa = dt.strftime(fmt)
     return dt.strftime(fmt), GOOD_REQUEST
 
-#--------------  2nd TASK  -----------------
+#2nd TASK
 
 def convert_date_req(body):
     date_str    = body["date"]
@@ -82,7 +81,7 @@ def convert_date(date_str, from_tz, target_tz):
     date = date.replace(tzinfo=from_zone)
     return date.astimezone(target_zone)
 
-#--------------  3rd TASK  -----------------
+#3rd TASK
 
 def date_diff_req(body):
     if body is None:
@@ -105,9 +104,8 @@ def date_diff(first_date_str, second_date_str, first_tz_str, second_tz_str):
 
 
 
-#-------------------------------------------
-#------------  APPLICATION  ----------------
-#-------------------------------------------
+#APPLICATION
+
 
 def application (environ, start_response):
 
@@ -136,9 +134,9 @@ def application (environ, start_response):
     return [response_body[0].encode()]
 
 
-#-------------------------------------------
-#-----------------  TEST  ------------------
-#-------------------------------------------
+
+#TEST
+
 import os
 import json
 import requests
@@ -166,7 +164,7 @@ second_date = "12.20.2021 22:19:05"
 second_tz = "Europe/Moscow"
 body = {"first_date": first_date, "first_tz": first_tz, "second_date": second_date, "second_tz": second_tz}
 r_test_3 = requests.post(DATE_DIFF_PATH, data=json.dumps(body))
-#---------------------------------------------------------------
+#
 
 if __name__ == '__main__':
     with make_server('', 8081, application) as workplease:
