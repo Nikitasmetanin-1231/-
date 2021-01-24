@@ -1,0 +1,175 @@
+from wsgiref.util import setup_testing_defaults
+from wsgiref.simple_server import make_server
+import sys
+from urllib.parse import parse_qs
+from datetime import datetime
+import dateutil.parser
+from pytz import timezone
+import json
+from io import StringIO
+
+POST    = "POST"
+GET     = "GET"
+
+GOOD_REQUEST    = "200 OK"
+BAD_REQUEST     = "401 BAD REQUEST"
+NOT_IMPLEMENTED = "501 NOT IMPLEMENTED"
+
+SCHEME      = "http://localhost:8000"
+BASE_URL    = "/api/v1"
+
+CONVERT_TIME_PATH   = BASE_URL + "/convert"
+DATE_DIFF_PATH      = BASE_URL + "/datediff"
+
+#-------------------------------------------
+#---------------  ROUTE  -------------------
+#-------------------------------------------
+
+def route(path,request_type, body):
+    if path == CONVERT_TIME_PATH and request_type == POST:      # 2nd task
+        response = convert_date_req(body)
+        return response[0], response[1]
+    elif path == DATE_DIFF_PATH and request_type == POST:       # 3rd task
+        response = date_diff_req(body)
+        return response[0], response[1]
+    elif request_type == GET:                                   # 1st task
+        response = get_current_time_req(path[1:])
+        return response[0], response[1]
+    else:
+        return None, NOT_IMPLEMENTED                            # indefinitely
+
+#-------------------------------------------
+#---------------  TASKS  -------------------
+#-------------------------------------------
+
+def make_json(dict):
+    return json.dumps(dict, sort_keys=True, default=str)
+
+#--------------  1st TASK  -----------------
+
+def get_current_time_req(tz):
+    result = current_date(tz)
+    response = {"date": result[0]}
+    return make_json(response), result[1]
+
+def current_date(tz):
+    if tz is None:
+        return datetime.now().astimezone(timezone.UTC), GOOD_REQUEST
+    time_tz = timezone(tz)
+    dt = datetime.now().astimezone(time_tz)
+    fmt = '%m.%d.%Y %H:%M:%S %Z'
+    aa = dt.strftime(fmt)
+    return dt.strftime(fmt), GOOD_REQUEST
+
+#--------------  2nd TASK  -----------------
+
+def convert_date_req(body):
+    date_str    = body["date"]
+    tz  = body["tz"]
+    target_tz = body["target_tz"]
+    if date_str is None or tz is None or target_tz is None:
+        return None, BAD_REQUEST
+    converted_date = convert_date(date_str, tz, target_tz)
+    response = {'date': converted_date}
+    return make_json(response), GOOD_REQUEST
+
+
+def convert_date(date_str, from_tz, target_tz):
+    from_zone = timezone(from_tz)
+    target_zone = timezone(target_tz)
+    fmt = '%m.%d.%Y %H:%M:%S'
+    date = datetime.strptime(date_str, fmt)
+    date = date.replace(tzinfo=from_zone)
+    return date.astimezone(target_zone)
+
+#--------------  3rd TASK  -----------------
+
+def date_diff_req(body):
+    if body is None:
+        return None, BAD_REQUEST
+    first_date = body["first_date"]
+    first_tz = body["first_tz"]
+    second_date = body["second_date"]
+    second_tz = body["second_tz"]
+    if first_date is None or first_tz is None or second_date is None or second_tz is None:
+        return None, BAD_REQUEST
+    response = {"diff": date_diff(first_date, second_date, first_tz, second_tz)}
+    return make_json(response), GOOD_REQUEST
+
+def date_diff(first_date_str, second_date_str, first_tz_str, second_tz_str):
+    first_date = datetime.strptime(first_date_str,'%m.%d.%Y %H:%M:%S').replace(tzinfo=timezone(first_tz_str))
+    second_date = datetime.strptime(second_date_str,'%m.%d.%Y %H:%M:%S').replace(tzinfo=timezone(second_tz_str))
+    diff = abs(first_date - second_date).total_seconds()
+    return diff
+
+
+
+
+#-------------------------------------------
+#------------  APPLICATION  ----------------
+#-------------------------------------------
+
+def application (environ, start_response):
+
+    setup_testing_defaults(environ)
+    method      = environ["REQUEST_METHOD"]
+    path        = environ["PATH_INFO"]
+    req_length  = environ["CONTENT_LENGTH"]
+
+    content_length = 0
+    if req_length:
+        content_length = int(req_length)
+
+    body = ""
+    if content_length > 0:
+        body = StringIO(environ["wsgi.input"].read(content_length).decode()).getvalue()
+
+    response_body = route(path, method, json.loads(body) if body else None)
+
+    # Now content type is text/html
+    response_headers = [
+        ('Content-Type', 'application/json'),
+        ('Content-Length', str(len(response_body)))
+    ]
+
+    start_response(response_body[1], response_headers)
+    return [response_body[0].encode()]
+
+
+#-------------------------------------------
+#-----------------  TEST  ------------------
+#-------------------------------------------
+import os
+import json
+import requests
+
+SCHEME      = "http://localhost:8081"
+BASE_URL    = "/api/v1"
+
+CONVERT_TIME_PATH   = SCHEME + BASE_URL + "/convert"
+DATE_DIFF_PATH      = SCHEME + BASE_URL + "/datediff"
+
+os.environ['NO_PROXY'] = 'localhost:8081'
+
+# test_1
+r_test_1 = requests.get(SCHEME+"/America/Juneau")
+
+# test 2
+moscow_date_str = "12.20.2021 22:21:05"
+body = {"date": moscow_date_str, "tz": "Europe/Moscow", "target_tz": "Asia/Tomsk"}
+r_test_2 = requests.post(CONVERT_TIME_PATH, data=json.dumps(body))
+
+# test 3
+first_date = "12.21.2021 02:21:05"
+first_tz = "Asia/Tomsk"
+second_date = "12.20.2021 22:19:05"
+second_tz = "Europe/Moscow"
+body = {"first_date": first_date, "first_tz": first_tz, "second_date": second_date, "second_tz": second_tz}
+r_test_3 = requests.post(DATE_DIFF_PATH, data=json.dumps(body))
+#---------------------------------------------------------------
+
+if __name__ == '__main__':
+    with make_server('', 8081, application) as workplease:
+        print("Serving on port 8081...")
+        workplease.serve_forever()
+        workplease.handle_request()
